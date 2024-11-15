@@ -17,6 +17,9 @@ def relay(relay_socket):
     layer, address_dest, port_dest = parse_packet(client_data)
     
     strip_data = client_data[PAQUET_HEADER_SIZE:]
+    #ajouter des octets a la fin = PAQUET__HEADER_SIZE
+    strip_data += b'\x00' * PAQUET_HEADER_SIZE
+     
     server_socket = connect(address_dest, port_dest)
     
     if server_socket is None:
