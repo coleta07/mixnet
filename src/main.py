@@ -14,6 +14,9 @@ def main():
     parser.add_argument("-s", "--node_role", help="Role du noeud (relay ou client)", required=True)
     parser.add_argument("-a", "--address", help="Adresse du noeud", required=False)
     parser.add_argument("-l", "--layer", help="Couche du relay", required=False)
+    parser.add_argument("-ad", "--address_dest", help="addresse de destination", required=False)
+    parser.add_argument("-sa", "--server_address", help="addresse du serveur", required=False)
+    
 
     # Analyse des arguments
     args = parser.parse_args()
@@ -25,10 +28,10 @@ def main():
         print("Fonction relay non implémentée actuellement")
     elif args.node_role == "client":
         # Appeler la fonction client_proxy (pour un client SOCKS5 par exemple)
-        start_local_socks5_proxy()
+        start_local_socks5_proxy(args.address, args.address_dest)
     elif args.node_role == "server":
         # Appeler la fonction start_server pour démarrer le serveur
-        start_final_server(args.address)
+        start_final_server(args.address, args.server_address, args.address_dest)
     else:
         print("Rôle du noeud invalide. Utilisez 'relay' ou 'client'.")
         sys.exit(1)

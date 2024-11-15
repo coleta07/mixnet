@@ -6,6 +6,7 @@ import datetime
 
 PAQUET_SIZE = 1092
 PAQUET_HEADER_SIZE = 28
+PAQUET_NUMBER = 1
 
 # Configuration du logger
 logging.basicConfig(filename="socks5_proxy.log", 
@@ -25,36 +26,37 @@ def parse_packet(packet):
     logging.info(f"Destination address: {address}, port: {port}")
     return layer, address, port
 
-def add_packet_header(data, relay_path_info, address_dest, port_dest):
+def add_packet_header(data, relay_path_info, address_dest, port_dest, flags, number):
 
     """Ajoute un en-tête au paquet avec l'adresse de destination, le port et le numéro de paquet."""
     
-    layer_header = str(relay_path_info[2][2]).encode('utf-8').ljust(4, b'\x00')
-    address_header = relay_path_info[2][0].encode('utf-8').ljust(20, b'\x00')  # Adresse de destination (20 octets)
-    port_header = str(relay_path_info[2][1]).encode('utf-8').ljust(4, b'\x00')
-    packet_header = layer_header + address_header + port_header
     layer_header = str(relay_path_info[1][2]).encode('utf-8').ljust(4, b'\x00')
     address_header = relay_path_info[1][0].encode('utf-8').ljust(20, b'\x00')  # Adresse de destination (20 octets)
     port_header = str(relay_path_info[1][1]).encode('utf-8').ljust(4, b'\x00')
+    packet_header = layer_header + address_header + port_header
+    layer_header = str(relay_path_info[2][2]).encode('utf-8').ljust(4, b'\x00')
+    address_header = relay_path_info[2][0].encode('utf-8').ljust(20, b'\x00')  # Adresse de destination (20 octets)
+    port_header = str(relay_path_info[2][1]).encode('utf-8').ljust(4, b'\x00')
     packet_header += layer_header + address_header + port_header
     layer_header = str(1).encode('utf-8').ljust(4, b'\x00')
     address_header = address_dest.encode('utf-8').ljust(20, b'\x00')  # Adresse de destination (20 octets)
     port_header = str(port_dest).encode('utf-8').ljust(4, b'\x00')  
     packet_header += layer_header + address_header + port_header
+    packet_header += str(flags).encode('utf-8').ljust(1, b'\x00')
+    packet_header += number.to_bytes(1, byteorder='little')
 
     return packet_header + data  # Retourne le paquet complet avec l'en-tête ajouté
 
 def connect(address, port):
     try:
         # Création d'un socket pour la connexion au serveur
-        logging.info(f"Tentative de connexion au relais {address}:{port}")
+        #logging.info(f"Tentative de connexion au relais {address}:{port}")
         relay_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # indiquer l'heure dans les logs
         relay_socket.connect((address, port))
-        logging.info(f"Connexion au relais {address}:{port} réussie")
+        #logging.info(f"Connexion au relais {address}:{port} réussie")
         return relay_socket
     except Exception as e:
-        logging.info(f"Erreur de connexion au relais {address}:{port} : {e}")
         logging.error(f"Erreur de connexion au relais {address}:{port} : {e}")
         return None
     
@@ -88,16 +90,22 @@ def create_relay_listener_socket(address, port):
     relay_listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     relay_listener_socket.bind((address, port))
     relay_listener_socket.listen(5)
-    logging.info(f"Relay listening on port {80} at IP {address}")
+    #logging.info(f"Relay listening on port {80} at IP {address}")
     return relay_listener_socket
 
-def send_paquet_to_relay(client_data, relay_sockets, address_dest, port_dest):
-    for i in range(0, len(client_data),PAQUET_SIZE-PAQUET_HEADER_SIZE*3):
-        packet = client_data[i:i + PAQUET_SIZE-PAQUET_HEADER_SIZE*3]
+def send_paquet_to_relay(client_data, relay_sockets, address_dest, port_dest, flags=0):
+    global PAQUET_NUMBER
+    for i in range(0, len(client_data),PAQUET_SIZE-PAQUET_HEADER_SIZE*3-2):
+        packet = client_data[i:i + PAQUET_SIZE-PAQUET_HEADER_SIZE*3-2]
         relay_path_info = choose_path(relay_sockets)
-        packet = add_packet_header(packet, relay_path_info, address_dest, port_dest)
-        logging.info("packet = ", packet)
+        packet = add_packet_header(packet, relay_path_info, address_dest, port_dest, flags, PAQUET_NUMBER)
+        #logging.info("packet = ", packet)
         relay_socket = connect(relay_path_info[0][0], relay_path_info[0][1])
+        if flags == 0:
+            if PAQUET_NUMBER == 9:
+                PAQUET_NUMBER = 0
+            PAQUET_NUMBER += 1
+
         if relay_socket:
             try:
                 relay_socket.sendall(packet)
@@ -116,3 +124,11 @@ def choose_path(relay_sockets):
         elif info[2] == 3:
             layer3.append(info)
     return (random.choice(layer1), random.choice(layer2), random.choice(layer3))
+
+def dummy_traffic(address_dest, port_dest, relay_sockets):
+    dummy_data = os.urandom(PAQUET_SIZE - PAQUET_HEADER_SIZE*3-1)
+    send_paquet_to_relay(dummy_data, relay_sockets,address_dest, port_dest, 1)
+        
+
+
+
